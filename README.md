@@ -1,3 +1,19 @@
+# Linux terminal
+
+so i was looking at this terminal [(here)](https://glitch.com/edit/#!/fake-terminal) and the roadmap started sounding like a social media site so i remixed it and am trying to make this a full-fledged linux terminal. its very difficult.
+
+now includes
+
+- sudo mode for when you need sudo power
+- passwords for each user
+- comprehensive help
+- set flags on commands
+- fiiiiiles!!!!!!
+
+
+original readme:
+
+```
 real fake terminal
 ==================
 
@@ -17,4 +33,4 @@ product roadmap
   - share aliases
   - pipe commands to your friends’ shells
   - memories / stories
-  
+```
