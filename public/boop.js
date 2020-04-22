@@ -2,6 +2,13 @@
 /**
  * Instance of Terminal
  */
+import { Terminal } from "./terminal.js";
+
+var apt = {
+  packages: ["cowsay"],
+  installed: []
+};
+
 var home = [0];
 var commands = {};
 var state = {};
@@ -11,15 +18,24 @@ var fs = {
     let storage =
       localStorage.getItem("data") || JSON.stringify(this.defaultfiles);
     this.files = JSON.parse(storage);
+    storage = localStorage.getItem("apt") || JSON.stringify(apt);
+    apt = JSON.parse(storage);
+    apt.installed.forEach(async i => {
+      let pack = await import("./apt/" + i + ".js");
+      commands[i] = pack[i];
+    });
   },
 
   save: function() {
     localStorage.setItem("data", JSON.stringify(this.files));
+    localStorage.setItem("apt", JSON.stringify(apt));
   },
 
   reset: function() {
     localStorage.setItem("data", JSON.stringify(this.defaultfiles));
     this.files = JSON.parse(JSON.stringify(this.defaultfiles));
+    apt.installed = [];
+    localStorage.setItem("apt", JSON.stringify(apt));
   },
   files: [],
   defaultfiles: [
@@ -419,6 +435,54 @@ commands.grep = async function(args) {
   return { msg: out, err: false };
 };
 
+commands.whoami = function() {
+  return { msg: terminal.user, err: false };
+};
+
+commands.apt = async function(args) {
+  switch (args[1]) {
+    case "install":
+      if (!apt.packages.includes(args[2]))
+        return {
+          msg: '<span class="err">package not found</span>',
+          err: true
+        };
+      if (apt.installed.includes(args[2]))
+        return {
+          msg: '<span class="err">package already installed</span>',
+          err: true
+        };
+      let pack = await import("./apt/" + args[2] + ".js");
+      commands[args[2]] = pack[args[2]];
+      apt.installed.push(args[2]);
+      break;
+    case "remove":
+      if (!apt.packages.includes(args[2]))
+        return {
+          msg: '<span class="err">package not found</span>',
+          err: true
+        };
+      if (!apt.installed.includes(args[2]))
+        return {
+          msg: '<span class="err">package not installed</span>',
+          err: true
+        };
+      delete commands[args[2]];
+      apt.installed = apt.installed.splice(apt.installed.indexOf(args[2]), 0);
+      break;
+    case "list":
+      return { msg: apt.packages.join("<br />"), err: false };
+      break;
+    default:
+      return {
+        msg: '<span class="err">apt must have "install"</span>',
+        err: true
+      };
+      break;
+  }
+  return { msg: "Done!", err: false };
+};
+
 commands.curl = async function(args) {
   let req;
   try {
@@ -443,21 +507,21 @@ commands.fs = function(args, opts) {
   switch (args[1]) {
     case "save":
       fs.save();
-      return "Succesfully saved";
+      return { msg: "Succesfully saved", err: false };
       break;
     case "load":
       fs.load();
-      return "Succesfully loaded";
+      return { msg: "Succesfully loaded", err: false };
       break;
     case "reset":
       if (opts[".sudo"]) {
         fs.reset();
-        return "Succesfully reset";
+        return { msg: "Succesfully reset", err: false };
       } else {
         return {
           msg:
             '<span class="err">You do not have the necesary privileges</span>',
-          err: false
+          err: true
         };
       }
       break;
@@ -495,8 +559,10 @@ commands["lin append"] = function(output, pathout) {
 
 commands["lin set"] = function(output, pathout) {
   let cleaned = document.createElement("pre");
+
   cleaned.style.whiteSpace = "pre";
   cleaned.innerHTML = output;
+  cleaned.innerHTML = cleaned.innerHTML.replace("<br>", "\\n");
   output = cleaned.innerText;
   let file = commands["lin file"](pathout, true);
   file.content = output;
@@ -601,56 +667,7 @@ function cleanStr(str) {
 }
 
 // todo autocomplete files
-/*
-// takes a text field and an array of strings for autocompletion
-function autocomplete(input, data) {
-    var candidates = []
-    // filter data to find only strings that start with existing value
-    for (var i=0; i < data.length; i++) {
-    if (data[i].indexOf(input.innerText) == 0 && data[i].length > input.innerText.length)
-        candidates.push(data[i])
-    }
 
-    if (candidates.length > 0) {
-      // some candidates for autocompletion are found
-      if (candidates.length == 1) input.innerText = candidates[0]
-      else input.innerText = longestInCommon(candidates, input.innerText.length)
-      return true
-    }
-  
-  return false
-}
-
-// finds the longest common substring in the given data set.
-// takes an array of strings and a starting index
-function longestInCommon(candidates, index) {
-  var i, ch, memo
-  do {
-    memo = null
-    for (i=0; i < candidates.length; i++) {
-      ch = candidates[i].charAt(index)
-      if (!ch) break
-      if (!memo) memo = ch
-      else if (ch != memo) break
-    }
-  } while (i == candidates.length && ++index)
-
-  return candidates[0].slice(0, index)
-}*/
-
-/*
-if(!localStorage.getItem('name').pwd||!localStorage.getItem('name').key) {
-    let tmp = localStorage.getItem('name');
-    if(ui.alert("You do not have a password. Set one?", ui.ButtonSet.YES_NO)==ui.Button.YES){
-      tmp.pwd=ui.prompt('Enter a password').getResponseText();
-      if(tmp.pwd==ui.prompt('Confirm password').getResponseText()) {
-        tmp.key=(Math.random()+"").substr(2);
-        tmp.pwd=encrypt(tmp.pwd,tmp.key);
-        setData('name',tmp);
-      } else {
-        ui.alert('Password set failed!');
-        return;
-      }
-    }
-  }
-*/
+window.addEventListener("DOMContentLoaded", _ => {
+  initTerminal();
+});

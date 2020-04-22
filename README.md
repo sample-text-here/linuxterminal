@@ -11,7 +11,8 @@ now includes
 - fiiiiiles!!!!!!
 - redirect output with `>` and `>>`
 - `|` puoipes!! `|`
-
+- apt install, remove, and list
+  - currently only has cowsay
 
 original readme:
 
