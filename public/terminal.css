@@ -19,6 +19,22 @@
 
   font-smooth: never;
   -webkit-font-smoothing: none;
+  overflow: hidden;
+}
+
+.terminal::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: transparent;
+  background-size: cover;
+  background-repeat: repeat-y;
+  z-index: 99999;
+  pointer-events: none;
+  animation: scan 3s linear 1s infinite;
 }
 
 .terminal-output {
@@ -77,4 +93,43 @@
 .terminal .important {
   color: lime;
   text-shadow: 0 0 2px lime;
+}
+
+@keyframes scan {
+  0% {
+    background-image:repeating-linear-gradient(
+      transparent,
+      #0000 1px,
+      #0000 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  },
+  30% {
+    background-image: repeating-linear-gradient(
+      transparent,
+      #0005 1px,
+      #0005 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  },
+  70% {
+    background-image: repeating-linear-gradient(
+      transparent,
+      #0005 1px,
+      #0005 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  },
+  100% {
+    background-image:repeating-linear-gradient(
+      transparent,
+      #0000 1px,
+      #0000 1px,
+      transparent 1px,
+      transparent 2px
+    );
+  },
 }

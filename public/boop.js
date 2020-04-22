@@ -2,13 +2,30 @@
 /**
  * Instance of Terminal
  */
+var home = [0];
 var commands = {};
 var state = {};
 var terminal;
-var files = [
+var fs = {
+  load: function() {
+    let storage =
+      localStorage.getItem("data") || JSON.stringify(this.defaultfiles);
+    this.files = JSON.parse(storage);
+  },
+
+  save: function() {
+    localStorage.setItem("data", JSON.stringify(this.files));
+  },
+
+  reset: function() {
+    localStorage.setItem("data", JSON.stringify(this.defaultfiles));
+    this.files = JSON.parse(JSON.stringify(this.defaultfiles));
+  },
+  files: [],
+  defaultfiles: [
     {
       type: "folder",
-      name: "~",
+      name: "root",
       files: [
         {
           type: "folder",
@@ -29,7 +46,10 @@ var files = [
       ]
     }
   ],
-  path = [0];
+  path: [0]
+};
+
+fs.load();
 
 commands.help = function(args) {
   var help = [
@@ -57,7 +77,7 @@ commands.help = function(args) {
       params: "&lt;file&gt;",
       short: "Display file(s)",
       long:
-        'Display one or more files. Using the "-space" and "-newline" flags will concatinate multiple files with spaces and new lines, respectively'
+        'Display one or more files. Using the "-s" and "-n" flags will concatinate multiple files with spaces and new lines, respectively'
     },
     {
       command: "cd",
@@ -106,15 +126,33 @@ commands.help = function(args) {
       params: "&lt;command&gt;",
       short: "Runs commands with elevated privlages",
       long: "Runs commands with elevated privlages. Requires password."
+    },
+    {
+      command: "grep",
+      params: "&lt;text&gt; &lt;search&gt;",
+      short: "Searches text",
+      long: "Searches text and returns the lines where the text appears."
     }
   ];
+  help = help.sort(function(x, y) {
+    if (x.command < y.command) {
+      return -1;
+    }
+    if (x.command > y.command) {
+      return 1;
+    }
+    return 0;
+  });
   if (args[1]) {
     var man = help.filter(i => i.command == args[1]);
     man = man[0];
-    if (!man) return "No help page for this command";
+    if (!man) return { msg: "No help page for this command", err: true };
     var output = args[1] + " " + man.params + "\n";
     output += man.long;
-    return '<span class="important">' + args[1] + "</span><br> " + output;
+    return {
+      msg: '<span class="important">' + args[1] + "</span><br> " + output,
+      err: false
+    };
   } else {
     var output = "Here are the currently available commands:<br><br>";
     for (let i of help) {
@@ -122,13 +160,13 @@ commands.help = function(args) {
       output += i.params + " - ";
       output += i.short + "<br>";
     }
-    return output;
+    return { msg: output, err: false };
   }
 };
 
 commands.echo = function(args) {
   args.shift();
-  return args.join(" ");
+  return { msg: cleanStr(args.join(" ")), err: false };
 };
 
 /**
@@ -137,10 +175,10 @@ commands.echo = function(args) {
 commands.iddqd = function() {
   if (!state.iddqd) {
     state.iddqd = true;
-    return "Degreelessness mode on";
+    return { msg: "Degreelessness mode on", err: false };
   } else {
     state.iddqd = false;
-    return "Degreelessness mode off";
+    return { msg: "Degreelessness mode off", err: false };
   }
 };
 
@@ -149,21 +187,34 @@ commands.iddqd = function() {
  */
 commands.look = function(args) {
   if (args.length <= 1) {
-    return "You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here.<br><br>";
+    return {
+      msg:
+        "You are standing in an open field west of a white house, with a boarded front door. There is a small mailbox here.<br><br>",
+      err: false
+    };
   } else {
-    return "I don't know the word \"" + args[1] + '".<br><br>';
+    return {
+      msg: "I don't know the word \"" + args[1] + '".<br><br>',
+      err: true
+    };
   }
 };
 
 commands.passwd = function(args, opts) {
   opts = opts || {};
-  if (!opts.sudo) {
-    return '<span class="err">You do not have the necesary privileges</span>';
+  if (!opts[".sudo"]) {
+    return {
+      msg: '<span class="err">You do not have the necesary privileges</span>',
+      err: true
+    };
   }
   setTimeout(_ => {
     terminal.setpwd.prompt(true);
   }, 0);
-  return "Are you rure you would like to reset your password? (Y/n)";
+  return {
+    msg: "Are you sure you would like to reset your password? (Y/n)",
+    err: false
+  };
 };
 
 commands.su = function(args, opts) {
@@ -177,28 +228,31 @@ commands.su = function(args, opts) {
       }
     }, 0);
   } else if (opts[""]) {
-    if (opts.sudo) {
+    if (opts[".sudo"]) {
       Terminal.user = "root";
     } else {
-      return '<span class="err">You do not have the necesary privileges</span>';
+      return {
+        msg: '<span class="err">You do not have the necesary privileges</span>',
+        err: true
+      };
     }
   }
-  return "";
+  return { msg: "", err: false };
 };
 
 commands.pwd = function(args) {
   var out = "",
-    tmp = files;
-  for (var i = 0; i < path.length; i++) {
-    out += tmp[path[i]].name + "/";
-    tmp = tmp[path[i]].files;
+    tmp = fs.files;
+  for (var i = 0; i < fs.path.length; i++) {
+    out += tmp[fs.path[i]].name + "/";
+    tmp = tmp[fs.path[i]].files;
   }
-  return out;
+  return { msg: "/" + out, err: false };
 };
 
 commands.ls = function(args) {
   var out = "",
-    tmp = getplace(path) || [];
+    tmp = getplace(fs.path) || [];
   for (var i = 0; i < tmp.length; i++) {
     if (tmp[i].type == "folder") {
       out +=
@@ -209,24 +263,27 @@ commands.ls = function(args) {
       out += "<span>" + tmp[i].name + "</span> ";
     }
   }
-  return out;
+  return { msg: out, err: false };
 };
 
 commands.cd = function(args) {
-  path = strToPath(args[1]);
-  if (path[0] == "<") {
-    path = [0];
-    return '<span class="err">Directory does not exist</span>';
+  fs.path = strToPath(args[1]);
+  if (fs.path[0] == "<") {
+    fs.path = [0];
+    return {
+      msg: '<span class="err">Directory does not exist</span>',
+      err: true
+    };
   }
-  return "";
+  return { msg: "", err: false };
 };
 
-
 commands.touch = function(args) {
-  let tmp = strToPath(args[1]);
+  if (!args[1]) return;
+  let tmp = strToPath(args[1], true);
   let fname = args[1].split("/")[args[1].split("/").length - 1];
   if (tmp[0] == "<") {
-    return '<span class="err">Directory does not exist</span>';
+    return { msg: tmp, err: true };
   }
   tmp = getplace(tmp);
   if (!tmp.filter(i => i.type == "file" && i.name == fname)[0]) {
@@ -236,54 +293,65 @@ commands.touch = function(args) {
       content: ""
     });
   }
-  return "";
+  refresh(fs.path);
+  return { msg: "", err: false };
 };
 
 commands.mkdir = function(args) {
   let tmp = strToPath(args[1], true);
   let fname = args[1].split("/")[args[1].split("/").length - 1];
   if (tmp[0] == "<") {
-    return '<span class="err">Directory does not exist</span>';
+    return {
+      msg: '<span class="err">Directory does not exist</span>',
+      err: true
+    };
   }
   tmp = getplace(tmp);
   if (!tmp.filter(i => i.type == "folder" && i.name == fname)[0]) {
     tmp.push({
       type: "folder",
       name: fname,
-      content: ""
+      files: []
     });
   }
-  return "";
+  refresh(fs.path);
+  return { msg: "", err: false };
 };
 
 commands.rm = function(args) {
   let tmp = strToPath(args[1]);
   let fname = args[1].split("/")[args[1].split("/").length - 1];
   if (tmp[0] == "<") {
-    return '<span class="err">Directory does not exist</span>';
+    return { msg: '<span class="err">File does not exist</span>', err: true };
   }
   tmp = getplace(tmp);
   let index = tmp.findIndex(i => i.type == "file" && i.name == fname);
   if (tmp < 0) {
-    return '<span class="err">Directory does not exist</span>';
+    return { msg: '<span class="err">File does not exist</span>', err: false };
   }
-  tmp.splice(index,1);
-  return "";
+  tmp.splice(index, 1);
+  return { msg: "", err: false };
 };
 
 commands.rmdir = function(args) {
   let tmp = strToPath(args[1], true);
   let fname = args[1].split("/")[args[1].split("/").length - 1];
   if (tmp[0] == "<") {
-    return '<span class="err">Directory does not exist</span>';
+    return {
+      msg: '<span class="err">Directory does not exist</span>',
+      err: true
+    };
   }
   tmp = getplace(tmp);
   let index = tmp.findIndex(i => i.type == "folder" && i.name == fname);
   if (tmp < 0) {
-    return '<span class="err">Directory does not exist</span>';
+    return {
+      msg: '<span class="err">Directory does not exist</span>',
+      err: true
+    };
   }
-  tmp.splice(index,1);
-  return "";
+  tmp.splice(index, 1);
+  return { msg: "", err: false };
 };
 
 commands.cat = function(args, opts) {
@@ -295,34 +363,60 @@ commands.cat = function(args, opts) {
 
     var dir = strToPath(item);
     if (dir[0] == "<") {
-      return dir;
+      return { msg: dir, err: true };
     }
 
     dir = getplace(dir);
 
     for (var i = 0; i < dir.length + 1; i++) {
       if (i > dir.length - 1) {
-        return '<span class="err">File does not exist</span>';
+        return {
+          msg: '<span class="err">File does not exist</span>',
+          err: true
+        };
       }
       if (dir[i].name == fname) {
         if (dir[i].type == "file") {
-          out += cleanStr(dir[i].content);
+          out += cleanStr(dir[i].content)
+            .split("\n")
+            .join("<br />");
           switch (true) {
-            case opts["space"]:
+            case opts["s"]:
               out += " ";
               break;
-            case opts["newline"]:
+            case opts["n"]:
               out += "<br>";
               break;
           }
           break;
         } else {
-          return '<span class="err">Attempted to cat folder</span>';
+          return {
+            msg: '<span class="err">Attempted to cat folder</span>',
+            err: true
+          };
         }
       }
     }
   });
-  return out || '<span class="err">File not found</span>';
+  return { msg: out || '<span class="err">File not found</span>', err: true };
+};
+
+commands.grep = async function(args) {
+  var out = "";
+  if (!args[1]) return { msg: '<span class="err">No input</span>', err: true };
+  if (!args[2])
+    return { msg: '<span class="err">No search term</span>', err: true };
+  args[1] = args[1].split("\n");
+  args[1].forEach(i => {
+    if (i.includes(args[2])) {
+      out +=
+        cleanStr(i).replace(
+          args[2],
+          `<span class="important">${cleanStr(args[2])}</span>`
+        ) + "<br>";
+    }
+  });
+  return { msg: out, err: false };
 };
 
 commands.curl = async function(args) {
@@ -331,9 +425,11 @@ commands.curl = async function(args) {
     req = await fetch(args[1]);
     req = await req.text();
   } catch {
-    return '<span class="err">Failed to get resource</span>';
+    return {
+      msg: '<span class="err">Failed to get resource</span>',
+      err: false
+    };
   }
-  // return req;
   return cleanStr(req);
 };
 
@@ -343,30 +439,93 @@ commands.exit = function(args) {
   window.close();
 };
 
+commands.fs = function(args, opts) {
+  switch (args[1]) {
+    case "save":
+      fs.save();
+      return "Succesfully saved";
+      break;
+    case "load":
+      fs.load();
+      return "Succesfully loaded";
+      break;
+    case "reset":
+      if (opts[".sudo"]) {
+        fs.reset();
+        return "Succesfully reset";
+      } else {
+        return {
+          msg:
+            '<span class="err">You do not have the necesary privileges</span>',
+          err: false
+        };
+      }
+      break;
+    default:
+      break;
+  }
+};
+
+commands["lin file"] = function(path, make) {
+  var fname = path.split("/")[path.split("/").length - 1];
+
+  let folder = strToPath(fname, true);
+
+  if (folder[0] == "<") {
+    return folder;
+  }
+
+  folder = getplace(folder);
+  if (make) {
+    commands.touch(["touch", path]);
+  }
+
+  return folder.filter(i => i.type == "file" && i.name == fname)[0];
+};
+
+commands["lin append"] = function(output, pathout) {
+  let cleaned = document.createElement("div");
+  cleaned.innerHTML = output;
+  output = cleaned.innerText;
+
+  let file = commands["lin file"](pathout, true);
+
+  file.content += output + "\n";
+};
+
+commands["lin set"] = function(output, pathout) {
+  let cleaned = document.createElement("pre");
+  cleaned.style.whiteSpace = "pre";
+  cleaned.innerHTML = output;
+  output = cleaned.innerText;
+  let file = commands["lin file"](pathout, true);
+  file.content = output;
+};
+
 function getplace(path) {
-  var tmp = files;
+  var tmp = fs.files;
   for (var i = 0; i < path.length; i++) {
     tmp = tmp[path[i]].files;
   }
   return tmp;
 }
 
-function strToPath(str, allowfolders) {
-  var xpath = path.slice(0),
+function strToPath(str, empty = false) {
+  var xpath = fs.path.slice(0),
     str = str.split("/");
   if (str[0] == "") {
-    xpath = [0];
+    xpath = [];
   }
-  if (str[str.length - 1].search(/\./) != -1 || allowfolders) {
-    str.pop();
-  }
-  if (str.length <= 0) {
-    return path;
+  if (str.length < 0) {
+    return fs.path;
   }
 
-  var out = "",
-    tmp;
+  var tmp;
+
   for (var i = 0; i < str.length; i++) {
+    if (i == str.length - 1 && empty) {
+      break;
+    }
     if (str[i] == "") {
     } else if (str[i] == "~") {
       xpath = [0];
@@ -374,23 +533,45 @@ function strToPath(str, allowfolders) {
     } else if (str[i] == "..") {
       xpath.pop();
     } else {
-      tmp = getplace(xpath);
-      for (var j = 0; j < tmp.length + 1; j++) {
+      tmp = getplace(xpath) || { length: 0 };
+      for (var j = 0; j <= tmp.length; j++) {
         if (j == tmp.length) {
           return '<span class="err">Directory does not exist</span>';
-          break;
         }
-        if (tmp[j].type == "folder") {
-          if (tmp[j].name == str[i]) {
+        if (tmp[j].name == str[i]) {
+          if (tmp[j].type == "folder") {
             xpath.push(j);
+            break;
+          } else if (tmp[j].type == "file" && i == str.length - 1) {
             break;
           }
         }
       }
     }
-    i++;
   }
+
   return xpath;
+}
+
+function createReference(context, prop) {
+  return function() {
+    return context[prop];
+  };
+}
+
+function refresh(path) {
+  var newf = getplace(path);
+
+  var tmp = newf.filter(item => item.type == "folder");
+  newf.forEach((i, index) => {
+    if (i.type == "folder") {
+      newf.splice(index, 1);
+    }
+  });
+
+  for (let i of tmp) {
+    newf.unshift(i);
+  }
 }
 
 function initTerminal() {

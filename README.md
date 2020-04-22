@@ -9,6 +9,8 @@ now includes
 - comprehensive help
 - set flags on commands
 - fiiiiiles!!!!!!
+- redirect output with `>` and `>>`
+- `|` puoipes!! `|`
 
 
 original readme:

@@ -25,6 +25,19 @@ var Terminal = (function() {
     newPrompt.querySelector(".terminal-input").innerHTML = " ";
     newPrompt.querySelector(".terminal-input").focus();
   };
+  var doCommands = async function(terminal, input, sudo) {
+    input = input.join(" ").split("|");
+    var last = { output: "" };
+    for (let i of input) {
+      last = last.output;
+      i = i.trim();
+      i = i.split(" ");
+      i.splice(1, 0, last);
+      i = i.filter(i => i);
+      last = await tryCommand(terminal, i[0], i, sudo);
+    }
+    printCommand(terminal, (last||{output:{msg:""}}).output.msg, (last||{opts:""}).opts);
+  };
 
   var tryCommand = async function(terminal, cmd, args, sudo) {
     if (cmd == "clear") {
@@ -33,43 +46,103 @@ var Terminal = (function() {
     }
 
     if (cmd == "sudo") {
-      self.output.innerHTML += "[sudo] password for " + self.user + ":<br>";
-      args.shift();
-      self.sudo.queue = args.join(" ");
-      self.sudo.sudo = true;
-      return;
+      if (getData("password")) {
+        self.output.innerHTML += "[sudo] password for " + self.user + ":<br>";
+        args.shift();
+        self.sudo.queue = args.join(" ");
+        self.sudo.sudo = true;
+        return;
+      } else {
+        sudo = true;
+      }
     }
 
     if (cmd in self.commands) {
-      await parseCommand(terminal, cmd, args, sudo);
+      return await parseCommand(terminal, cmd, args, sudo);
     } else {
-      commandNotFound(terminal, cmd);
+      return commandNotFound(terminal, cmd);
     }
   };
 
   var parseCommand = async function(terminal, cmd, args, sudo = false) {
-    var options = { sudo: sudo };
+    var options = { ".sudo": sudo };
     for (let i = 0; i < args.length; i++) {
       if (i >= args.length) break;
       if (args[i][0] == "-") {
         let x = args[i].substr(1);
-        if (x != "sudo") {
+        if (x != ".sudo" || x != ".output") {
           options[x] = true;
         }
         args.splice(i, 1);
         i--;
       }
+
+      //redirect
+      if (args[i][0] == ">") {
+        options[".output"] = {};
+        if (args[i].length == 1) {
+          //> file
+          if (!args[i + 1]) {
+            redirectError(terminal);
+            return;
+          }
+          options[".output"].fname = args[i + 1];
+          options[".output"].type = "set";
+          args.splice(i, 2);
+        } else if (args[i][1] == ">") {
+          if (args[i].length > 2) {
+            //>>file
+            options[".output"].fname = args[i].substr(2);
+            options[".output"].type = "append";
+            args.splice(i, 1);
+          } else {
+            //>> file
+            if (!args[i + 1]) {
+              redirectError(terminal);
+              return;
+            }
+            options[".output"].fname = args[i + 1];
+            options[".output"].type = "append";
+            args.splice(i, 2);
+          }
+        } else {
+          //>file
+          options[".output"].fname = args[i].substr(1);
+          options[".output"].type = "set";
+          args.splice(i, 1);
+        }
+      }
     }
-    await runCommand(terminal, cmd, args, options);
+    return {
+      output: await runCommand(terminal, cmd, args, options),
+      opts: options
+    };
   };
 
   var runCommand = async function(terminal, cmd, args, opts) {
-    terminal.innerHTML += await self.commands[cmd](args, opts);
+    return await self.commands[cmd](args, opts);
+  };
+
+  var printCommand = async function(terminal, text, opts = {}) {
+    if (!opts[".output"]) {
+      terminal.innerHTML += text;
+      return;
+    }
+
+    if (opts[".output"].type == "set") {
+      self.commands["lin set"](text, opts[".output"].fname);
+    } else {
+      self.commands["lin append"](text, opts[".output"].fname);
+    }
   };
 
   var commandNotFound = function(terminal, cmd) {
     terminal.innerHTML +=
       '<span class="err">' + cmd + ": command not found</span>";
+  };
+
+  var redirectError = function(terminal) {
+    terminal.innerHTML += '<span class="err">Output redirect error</span>';
   };
 
   var updateHistory = function(cmd) {
@@ -178,6 +251,15 @@ var Terminal = (function() {
     localStorage.setItem("u-" + self.user, storage);
     return;
   }
+  
+  /*function load() {
+    let storage = localStorage.getItem("data") || "{}";
+    files = JSON.parse(storage);
+  }
+
+  function save() {
+    localStorage.setItem("data", JSON.stringify(files););
+  }*/
 
   function encrypt(string, key) {
     var out = "";
@@ -248,7 +330,7 @@ var Terminal = (function() {
       if (self.sudo.sudo == true) {
         if (encrypt(input.join(" "), getData("key")) == getData("password")) {
           input = self.sudo.queue.split(" ");
-          if (input[0]) await tryCommand(self.output, input[0], input, true);
+          if (input[0]) await doCommands(self.output, input, true);
           self.sudo.sudo = false;
           resetPrompt(self.output, prompt);
           event.preventDefault();
@@ -296,7 +378,7 @@ var Terminal = (function() {
           }
           break;
         default:
-          if (input[0]) await tryCommand(self.output, input[0], input);
+          if (input[0]) await doCommands(self.output, input);
           break;
       }
 
