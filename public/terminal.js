@@ -442,3 +442,4 @@ var Terminal = (function() {
 
   return self;
 })();
+export {Terminal};
