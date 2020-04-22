@@ -10,6 +10,7 @@ now includes
 - set flags on commands
 - fiiiiiles!!!!!!
 - redirect output with `>` and `>>`
+- `|` puoipes!! `|`
 
 
 original readme:
