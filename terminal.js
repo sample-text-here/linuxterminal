@@ -25,28 +25,56 @@ var Terminal = (function() {
     newPrompt.querySelector(".terminal-input").innerHTML = " ";
     newPrompt.querySelector(".terminal-input").focus();
   };
+
   var doCommands = async function(terminal, input, sudo) {
     input = input.join(" ").split("|");
-    var last = { output: "" };
+    var last = {};
     for (let i of input) {
       last = last.output;
       i = i.trim();
       i = i.split(" ");
       i.splice(1, 0, last);
       i = i.filter(i => i);
+
       last = await tryCommand(terminal, i[0], i, sudo);
     }
-    printCommand(terminal, (last||{output:{msg:""}}).output.msg, (last||{opts:""}).opts);
+
+    printCommand(
+      terminal,
+      (last.output ? last : { output: { msg: "\n" } }).output.msg,
+      (last ? last : { opts: "\n" }).opts
+    );
+    return;
   };
 
   var tryCommand = async function(terminal, cmd, args, sudo) {
+    if (self.commands["lin check"](cmd)) {
+      let exe = self.commands["lin check"](cmd).content;
+
+      exe = exe.split("\n");
+
+      exe.forEach(i => {
+        if (i) doCommands(terminal, i.split(" "), sudo);
+      });
+
+      return {};
+    }
+
     if (cmd == "clear") {
       self.output.innerHTML = "";
-      return;
+      return {
+        msg: "",
+        err: false
+      };
     }
 
     if (cmd == "sudo") {
-      if (getData("password")) {
+      if (self.sudo.sudo) {
+        while (cmd == "sudo") {
+          cmd = args[1];
+          args.shift();
+        }
+      } else if (getData("password")) {
         self.output.innerHTML += "[sudo] password for " + self.user + ":<br>";
         args.shift();
         self.sudo.queue = args.join(" ");
@@ -60,7 +88,7 @@ var Terminal = (function() {
     if (cmd in self.commands) {
       return await parseCommand(terminal, cmd, args, sudo);
     } else {
-      return commandNotFound(terminal, cmd);
+      return await commandNotFound(terminal, cmd);
     }
   };
 
@@ -137,8 +165,10 @@ var Terminal = (function() {
   };
 
   var commandNotFound = function(terminal, cmd) {
-    terminal.innerHTML +=
-      '<span class="err">' + cmd + ": command not found</span>";
+    let err = '<span class="err">' + cmd + ": command not found</span>";
+    return {
+      output: { msg: err }
+    };
   };
 
   var redirectError = function(terminal) {
@@ -251,7 +281,7 @@ var Terminal = (function() {
     localStorage.setItem("u-" + self.user, storage);
     return;
   }
-  
+
   /*function load() {
     let storage = localStorage.getItem("data") || "{}";
     files = JSON.parse(storage);
@@ -382,7 +412,9 @@ var Terminal = (function() {
           break;
       }
 
-      resetPrompt(self.output, prompt);
+      setTimeout(_ => {
+        resetPrompt(self.output, prompt);
+      }, 0);
       event.preventDefault();
     });
 
@@ -442,4 +474,4 @@ var Terminal = (function() {
 
   return self;
 })();
-export {Terminal};
+export { Terminal };
