@@ -41,15 +41,18 @@ var fs = {
   defaultfiles: [
     {
       type: "folder",
+      modified: Date.now(),
       name: "root",
       files: [
         {
           type: "folder",
+          modified: Date.now(),
           name: "dir",
           files: [
             {
               type: "file",
               name: "dirfile.txt",
+              modified: Date.now(),
               content: "file in directory"
             }
           ]
@@ -57,6 +60,7 @@ var fs = {
         {
           type: "file",
           name: "hello.txt",
+          modified: Date.now(),
           content: "Hello, world!"
         }
       ]
@@ -69,6 +73,12 @@ fs.load();
 
 commands.help = function(args) {
   var help = [
+    {
+      command: "exit",
+      params: "",
+      short: "Exit the terminal",
+      long: "Save and exits the terminal"
+    },
     {
       command: "help",
       params: "&lt;command&gt; (optional)",
@@ -87,6 +97,12 @@ commands.help = function(args) {
       short: "Substitute user identity",
       long:
         'Substitute user identity. To change to root, use "-" (but it requires sudo)'
+    },
+    {
+      command: "ls",
+      params: "",
+      short: "List files",
+      long: "Lists all files in the current directory"
     },
     {
       command: "cat",
@@ -148,6 +164,20 @@ commands.help = function(args) {
       params: "&lt;text&gt; &lt;search&gt;",
       short: "Searches text",
       long: "Searches text and returns the lines where the text appears."
+    },
+    {
+      command: "fs",
+      params: "&lt;save | load | reset&gt;",
+      short: "Root filesystem control",
+      long:
+        'Controls the base filesystem. Setting "that" to save will save it to your computer, load will load the last save, and reset (needs sudo) will reset everything'
+    },
+    {
+      command: "apt",
+      params: "&lt;install | remove | list&gt;",
+      short: "Advanced package manager",
+      long:
+        'Advanced package manager - Install installs a package, remove removes a package, and list lists packages ("--installed lists installed packages")'
     }
   ];
   help = help.sort(function(x, y) {
@@ -163,7 +193,8 @@ commands.help = function(args) {
     var man = help.filter(i => i.command == args[1]);
     man = man[0];
     if (!man) return { msg: "No help page for this command", err: true };
-    var output = args[1] + " " + man.params + "\n";
+    var output = "";
+    if (man.params) output = man.params + "<br>";
     output += man.long;
     return {
       msg: '<span class="important">' + args[1] + "</span><br> " + output,
@@ -182,20 +213,7 @@ commands.help = function(args) {
 
 commands.echo = function(args) {
   args.shift();
-  return { msg: cleanStr(args.join(" ")), err: false };
-};
-
-/**
- * Doom emulator
- */
-commands.iddqd = function() {
-  if (!state.iddqd) {
-    state.iddqd = true;
-    return { msg: "Degreelessness mode on", err: false };
-  } else {
-    state.iddqd = false;
-    return { msg: "Degreelessness mode off", err: false };
-  }
+  return { msg: cleanStr(args.join(" ")) + "\\n", err: false };
 };
 
 /**
@@ -371,6 +389,7 @@ commands.rmdir = function(args) {
 };
 
 commands.cat = function(args, opts) {
+  console.log(fs);
   opts = opts || {};
   args.shift();
   var out = "";
@@ -393,9 +412,7 @@ commands.cat = function(args, opts) {
       }
       if (dir[i].name == fname) {
         if (dir[i].type == "file") {
-          out += cleanStr(dir[i].content)
-            .split("\n")
-            .join("<br />");
+          out += cleanStr(dir[i].content);
           switch (true) {
             case opts["s"]:
               out += " ";
@@ -439,7 +456,8 @@ commands.whoami = function() {
   return { msg: terminal.user, err: false };
 };
 
-commands.apt = async function(args) {
+commands.apt = async function(args, opts) {
+  opts = opts || {};
   switch (args[1]) {
     case "install":
       if (!apt.packages.includes(args[2]))
@@ -471,11 +489,16 @@ commands.apt = async function(args) {
       apt.installed = apt.installed.splice(apt.installed.indexOf(args[2]), 0);
       break;
     case "list":
-      return { msg: apt.packages.join("<br />"), err: false };
+      return {
+        msg: opts["-installed"]
+          ? apt.installed.join("<br />")
+          : apt.packages.join("<br />"),
+        err: false
+      };
       break;
     default:
       return {
-        msg: '<span class="err">apt must have "install"</span>',
+        msg: '<span class="err">apt must have a subcommand</span>',
         err: true
       };
       break;
@@ -498,6 +521,7 @@ commands.curl = async function(args) {
 };
 
 commands.exit = function(args) {
+  commands[("fs", "fs save")];
   Terminal.exit();
   console.log("[Process completed]");
   window.close();
@@ -548,24 +572,28 @@ commands["lin file"] = function(path, make) {
 };
 
 commands["lin append"] = function(output, pathout) {
-  let cleaned = document.createElement("div");
-  cleaned.innerHTML = output;
-  output = cleaned.innerText;
-
   let file = commands["lin file"](pathout, true);
-
-  file.content += output + "\n";
+  console.log(fs);
+  file.content += output;
 };
 
 commands["lin set"] = function(output, pathout) {
-  let cleaned = document.createElement("pre");
-
-  cleaned.style.whiteSpace = "pre";
-  cleaned.innerHTML = output;
-  cleaned.innerHTML = cleaned.innerHTML.replace("<br>", "\\n");
-  output = cleaned.innerText;
   let file = commands["lin file"](pathout, true);
+  console.log(fs);
+
   file.content = output;
+};
+let asdfasdaf;
+
+commands["lin check"] = function(isfile) {
+  if (typeof strToPath(isfile) == "object") {
+    let tmp = getplace(strToPath(isfile));
+    let fname = isfile.split("/")[isfile.split("/").length - 1];
+    tmp = tmp.filter(i => i.name == fname && i.type == "file");
+    asdfasdaf = tmp;
+    return tmp[0];
+  }
+  return false;
 };
 
 function getplace(path) {
@@ -663,7 +691,8 @@ function cleanStr(str) {
     .replace(/\</g, "&lt;")
     .replace(/\>/g, "&gt;")
     .replace(/\"/g, "&quot;")
-    .replace(/\'/g, "&#39;");
+    .replace(/\'/g, "&#39;")
+    .replace(/\\n/g, "<br />");
 }
 
 // todo autocomplete files
